@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::Sense;
+use egui::{FontFamily, Sense};
 use std::{fs, time::SystemTime};
 
 struct CertGen {
@@ -8,6 +8,7 @@ struct CertGen {
     placeholders: Vec<Placeholder>,
     focused_placeholder_idx: Option<usize>,
     scene_rect: egui::Rect,
+    available_fonts: Vec<egui::FontFamily>,
 }
 
 impl Default for CertGen {
@@ -18,6 +19,7 @@ impl Default for CertGen {
             placeholders: Vec::new(),
             focused_placeholder_idx: None,
             scene_rect: egui::Rect::ZERO,
+            available_fonts: vec![FontFamily::Proportional],
         }
     }
 }
@@ -25,7 +27,6 @@ impl Default for CertGen {
 impl CertGen {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Self {
-            image_last_modified: SystemTime::UNIX_EPOCH,
             ..Self::default()
         }
     }
@@ -35,6 +36,7 @@ struct Placeholder {
     id: String,
     rect: egui::Rect,
     font_size: f32,
+    font_family: egui::FontFamily,
 }
 
 impl Placeholder {
@@ -46,6 +48,7 @@ impl Placeholder {
                 egui::Vec2 { x: 500., y: 500. },
             ),
             font_size,
+            font_family: egui::FontFamily::Proportional,
         }
     }
 }
@@ -59,7 +62,7 @@ impl eframe::App for CertGen {
 
         egui::Panel::left("side_panel").show_inside(ui, |ui| {
             ui.heading("Control Panel");
-            if ui.button("Open file…").clicked()
+            if ui.button("Select Template…").clicked()
                 && let Some(path) = rfd::FileDialog::new().pick_file()
             {
                 self.image_path = Some(path.display().to_string());
@@ -83,8 +86,8 @@ impl eframe::App for CertGen {
                 self.placeholders
                     .push(Placeholder::new("New Placeholder", 16.));
             }
-
             ui.separator();
+
             if let Some(idx) = self.focused_placeholder_idx {
                 ui.add(
                     egui::Slider::new(&mut self.placeholders[idx].font_size, 1.0..=100.0)
@@ -98,9 +101,51 @@ impl eframe::App for CertGen {
                         self.placeholders[idx].font_size -= 1.;
                     }
                 });
+
+                ui.separator();
+                egui::ComboBox::from_label("Choose font")
+                    .selected_text(format!("{}", self.placeholders[idx].font_family))
+                    .show_ui(ui, |ui| {
+                    for font in self.available_fonts.clone() {
+                        ui.selectable_value(&mut self.placeholders[idx].font_family, font.clone(), format!("{}", font));
+                    }
+                });
+
+                ui.separator();
+
                 if ui.button("Delete").clicked() {
                     self.focused_placeholder_idx = None;
                     self.placeholders.remove(idx);
+                }
+            }
+            ui.separator();
+
+            if ui.button("Install Local Font…").clicked()
+                && let Some(path) = rfd::FileDialog::new().pick_file()
+            {
+                match std::fs::read(&path) {
+                    Ok(font_bytes) => {
+                        let mut fonts = ui.ctx().fonts(|f| f.definitions().clone());
+
+                        let mut path_clone = path.clone();
+                        path_clone.set_extension("");
+                        let font_name = path_clone.file_name().expect("Font file doesn't have a name.").to_str().expect("Font name conversion to string failed.").to_owned();
+
+                        fonts.font_data.insert(
+                            font_name.clone(),
+                            std::sync::Arc::new(egui::FontData::from_owned(font_bytes)),
+                        );
+                        fonts.families.insert(
+                            egui::FontFamily::Name(font_name.clone().into()),
+                            vec![font_name.clone()],
+                        );
+
+                        ui.ctx().set_fonts(fonts);
+                        self.available_fonts.push(egui::FontFamily::Name(font_name.clone().into()));
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to read font file: {err}");
+                    }
                 }
             }
         });
@@ -129,7 +174,6 @@ impl eframe::App for CertGen {
 
                 let scene_res = scene.show(ui, &mut self.scene_rect, |ui| {
                     ui.image(egui::include_image!("../Welcome_Certificate_new.jpg"));
-                    let mut font_id = egui::FontId::default();
                     // Draw rect on focused placeholder
                     if let Some(p_idx) = &self.focused_placeholder_idx {
                         ui.painter().rect_stroke(
@@ -141,7 +185,11 @@ impl eframe::App for CertGen {
                     }
                     // Draw each placeholder's text
                     for (idx, p) in self.placeholders.iter_mut().enumerate() {
-                        font_id.size = p.font_size;
+                        // if p.font_family == egui::FontFamily::Name("my_font".into()) {
+                        //
+                        // dbg!(ui.ctx().fonts(|f| f.definitions().clone()).font_data);
+                        // }
+                        let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
                         p.rect = ui.painter().text(
                             p.rect.min,
                             egui::Align2::LEFT_TOP,
@@ -213,6 +261,15 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.set_debug_on_hover(false);
+            // let mut fonts = egui::FontDefinitions::default();
+
+            // Fallback for custom font
+            // fonts.families.insert(
+            //     egui::FontFamily::Name("my_font".into()),
+            //     vec!["Ubuntu-Light".to_string()], 
+            // );
+            // cc.egui_ctx.set_fonts(fonts);
+
             Ok(Box::new(CertGen::new(cc)))
         }),
     )
