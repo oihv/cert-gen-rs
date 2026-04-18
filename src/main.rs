@@ -9,6 +9,7 @@ struct CertGen {
     focused_placeholder_idx: Option<usize>,
     scene_rect: egui::Rect,
     available_fonts: Vec<egui::FontFamily>,
+    // font_vec_fonts: HashMap: <egui::FontFamily, ab_glyph::FontVec>,
 }
 
 impl Default for CertGen {
@@ -26,17 +27,23 @@ impl Default for CertGen {
 
 impl CertGen {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        Self {
-            ..Self::default()
-        }
+        Self { ..Self::default() }
     }
 }
 
 struct Placeholder {
     id: String,
     rect: egui::Rect,
+    pos: egui::Pos2,
     font_size: f32,
     font_family: egui::FontFamily,
+    text_align: egui::Align2,
+    screen_align: Option<TextImageAlign>,
+}
+
+enum TextImageAlign {
+    Horizontal,
+    Vertical,
 }
 
 impl Placeholder {
@@ -47,8 +54,11 @@ impl Placeholder {
                 egui::Pos2 { x: 500., y: 500. },
                 egui::Vec2 { x: 500., y: 500. },
             ),
+            pos: egui::Pos2::new(50., 50.),
             font_size,
             font_family: egui::FontFamily::Proportional,
+            text_align: egui::Align2::LEFT_TOP,
+            screen_align: None,
         }
     }
 }
@@ -103,13 +113,48 @@ impl eframe::App for CertGen {
                 });
 
                 ui.separator();
+
+                egui::ComboBox::from_label("Text alignment")
+                    .selected_text(format!("{:?}", self.placeholders[idx].text_align))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.placeholders[idx].text_align,
+                            egui::Align2::LEFT_CENTER,
+                            "Align Left",
+                        );
+                        ui.selectable_value(
+                            &mut self.placeholders[idx].text_align,
+                            egui::Align2::CENTER_CENTER,
+                            "Justify (Center)",
+                        );
+                        ui.selectable_value(
+                            &mut self.placeholders[idx].text_align,
+                            egui::Align2::RIGHT_CENTER,
+                            "Align Right",
+                        );
+                    });
+
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("󰘞").clicked() {
+                        self.placeholders[idx].screen_align = Some(TextImageAlign::Horizontal);
+                    }
+                    if ui.button("󰘢").clicked() {
+                        self.placeholders[idx].screen_align = Some(TextImageAlign::Vertical);
+                    }
+                });
+
                 egui::ComboBox::from_label("Choose font")
                     .selected_text(format!("{}", self.placeholders[idx].font_family))
                     .show_ui(ui, |ui| {
-                    for font in self.available_fonts.clone() {
-                        ui.selectable_value(&mut self.placeholders[idx].font_family, font.clone(), format!("{}", font));
-                    }
-                });
+                        for font in self.available_fonts.clone() {
+                            ui.selectable_value(
+                                &mut self.placeholders[idx].font_family,
+                                font.clone(),
+                                format!("{}", font),
+                            );
+                        }
+                    });
 
                 ui.separator();
 
@@ -129,7 +174,12 @@ impl eframe::App for CertGen {
 
                         let mut path_clone = path.clone();
                         path_clone.set_extension("");
-                        let font_name = path_clone.file_name().expect("Font file doesn't have a name.").to_str().expect("Font name conversion to string failed.").to_owned();
+                        let font_name = path_clone
+                            .file_name()
+                            .expect("Font file doesn't have a name.")
+                            .to_str()
+                            .expect("Font name conversion to string failed.")
+                            .to_owned();
 
                         fonts.font_data.insert(
                             font_name.clone(),
@@ -141,7 +191,8 @@ impl eframe::App for CertGen {
                         );
 
                         ui.ctx().set_fonts(fonts);
-                        self.available_fonts.push(egui::FontFamily::Name(font_name.clone().into()));
+                        self.available_fonts
+                            .push(egui::FontFamily::Name(font_name.clone().into()));
                     }
                     Err(err) => {
                         eprintln!("Failed to read font file: {err}");
@@ -164,35 +215,45 @@ impl eframe::App for CertGen {
                         println!("image forgotten!: ${time:?}");
                     }
                 }
+
                 let scene = egui::Scene::new()
                     .max_inner_size(ui.available_size_before_wrap())
                     .zoom_range(0.1..=2.0);
 
-                ui.label(format!("Scene rect: {}", self.scene_rect));
-
                 let mut is_any_placeholder_clicked = false;
 
                 let scene_res = scene.show(ui, &mut self.scene_rect, |ui| {
-                    ui.image(egui::include_image!("../Welcome_Certificate_new.jpg"));
-                    // Draw rect on focused placeholder
-                    if let Some(p_idx) = &self.focused_placeholder_idx {
-                        ui.painter().rect_stroke(
-                            self.placeholders[*p_idx].rect,
-                            0.,
-                            egui::Stroke::new(2., egui::Color32::BLUE),
-                            egui::StrokeKind::Outside,
-                        );
-                    }
+                    let img_res = ui.image(egui::include_image!("../Welcome_Certificate_new.jpg"));
+                    ui.label(format!("img_rect: {}", img_res.rect));
+
                     // Draw each placeholder's text
                     for (idx, p) in self.placeholders.iter_mut().enumerate() {
-                        // if p.font_family == egui::FontFamily::Name("my_font".into()) {
-                        //
-                        // dbg!(ui.ctx().fonts(|f| f.definitions().clone()).font_data);
-                        // }
+                        // Handle screen align
+                        if let Some(align) = &p.screen_align {
+                            match align {
+                                TextImageAlign::Horizontal => {
+                                    let img_width = img_res.rect.max.x - img_res.rect.min.x;
+                                    let p_width = p.rect.max.x - p.rect.min.x;
+                                    match p.text_align {
+                                        egui::Align2::LEFT_CENTER => p.pos.x = img_width / 2. - p_width / 2.,
+                                        egui::Align2::CENTER_CENTER => p.pos.x = img_width / 2.,
+                                        egui::Align2::RIGHT_CENTER => p.pos.x = img_width / 2. + p_width / 2.,
+                                        _ => (),
+                                    }
+                                }
+                                TextImageAlign::Vertical => {
+                                    let img_height = img_res.rect.max.y - img_res.rect.min.y;
+                                    let p_height = p.rect.max.y - p.rect.min.y;
+                                    p.pos.y = img_height / 2. - p_height / 2.;
+                                }
+                            }
+                            p.screen_align = None;
+                        }
+
                         let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
                         p.rect = ui.painter().text(
-                            p.rect.min,
-                            egui::Align2::LEFT_TOP,
+                            p.pos,
+                            p.text_align,
                             &p.id,
                             font_id.clone(),
                             egui::Color32::BLACK,
@@ -214,9 +275,18 @@ impl eframe::App for CertGen {
                         }
                         if let Some(focus_idx) = self.focused_placeholder_idx
                             && idx == focus_idx
-                            && p_res.dragged()
                         {
-                            p.rect = p.rect.translate(p_res.drag_delta())
+                            ui.painter().rect_stroke(
+                                p.rect,
+                                0.,
+                                egui::Stroke::new(2., egui::Color32::BLUE),
+                                egui::StrokeKind::Outside,
+                            );
+                            if p_res.dragged() {
+                                p.pos += p_res.drag_delta();
+                                p.rect = p.rect.translate(p_res.drag_delta());
+                            }
+                            ui.label(format!("focused: {:?}", p.rect));
                         }
                     }
                 });
@@ -235,7 +305,7 @@ impl eframe::App for CertGen {
                     self.focused_placeholder_idx = None;
                 }
             } else {
-                ui.horizontal_centered(|ui| {
+                ui.centered_and_justified(|ui| {
                     ui.label("No image selected as template");
                 });
             }
@@ -261,15 +331,6 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.set_debug_on_hover(false);
-            // let mut fonts = egui::FontDefinitions::default();
-
-            // Fallback for custom font
-            // fonts.families.insert(
-            //     egui::FontFamily::Name("my_font".into()),
-            //     vec!["Ubuntu-Light".to_string()], 
-            // );
-            // cc.egui_ctx.set_fonts(fonts);
-
             Ok(Box::new(CertGen::new(cc)))
         }),
     )
