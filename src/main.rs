@@ -1,13 +1,67 @@
 use eframe::egui;
-use egui::{FontFamily, Sense};
+use egui::{FontFamily, Sense, Widget};
+use std::collections::HashMap;
 use std::{fs, time::SystemTime};
 
-use crate::font::{install_default_font, install_new_font};
 mod font;
+use crate::font::{install_default_font, install_new_font};
+
+struct Source {
+    path: Option<String>,
+    last_modified: SystemTime,
+    data: Vec<Vec<String>>,
+    access_hash: HashMap<String, usize>,
+}
+
+impl Default for Source {
+    fn default() -> Self {
+        Self {
+            path: None,
+            last_modified: std::time::UNIX_EPOCH,
+            data: Vec::new(),
+            access_hash: HashMap::new(),
+        }
+    }
+}
+
+impl Source {
+    fn load_data(&mut self, path: std::path::PathBuf) {
+        match std::fs::read_to_string(path) {
+            Ok(string) => {
+                let mut lines = string.lines();
+
+                if lines.clone().count() == 0 {
+                    // TODO: propagate the error, show it in the UI
+                    panic!("Error: source file doesn't have any content.");
+                }
+                // TODO: how to check whether or not the file doesn't have a header?
+                // Get the first line
+                let line = lines.next().unwrap();
+                for (idx, key) in line.split(',').enumerate() {
+                    self.access_hash.insert(key.to_string(), idx);
+                }
+
+                // Populate the data vec
+                for line in lines {
+                    let mut row: Vec<String> = Vec::new();
+                    for datum in line.split(',') {
+                        row.push(datum.to_string());
+                    }
+                    self.data.push(row);
+                }
+            }
+            Err(e) => panic!("Error while reading source file: {e}"),
+        }
+    }
+}
 
 struct CertGen {
+    left_panel_expand: bool,
+    // TODO: change image to a whole new struct instead
     image_path: Option<String>,
     image_last_modified: SystemTime,
+    image_size: egui::Vec2,
+    source: Source,
     placeholders: Vec<Placeholder>,
     focused_placeholder_idx: Option<usize>,
     scene_rect: egui::Rect,
@@ -21,6 +75,8 @@ impl Default for CertGen {
             left_panel_expand: true,
             image_path: None,
             image_last_modified: SystemTime::UNIX_EPOCH,
+            image_size: egui::Vec2::ZERO,
+            source: Source::default(),
             placeholders: Vec::new(),
             focused_placeholder_idx: None,
             scene_rect: egui::Rect::ZERO,
@@ -90,7 +146,23 @@ impl eframe::App for CertGen {
         // TODO: make it collapsible too like the left panel
         egui::Panel::right("right_panel").show_animated_inside(ui, true, |ui| {
             ui.heading("Source Data Viewer");
+            ui.separator();
 
+            if ui.button("Select Source…").clicked()
+                && let Some(path) = rfd::FileDialog::new().pick_file()
+            {
+                self.source.path = Some(path.display().to_string());
+                // TODO! reload the data if the file has been modified.
+                self.source.load_data(path);
+            }
+
+            if let Some(path) = &self.source.path {
+                ui.label(format!("Selected source: {path}"));
+            } else {
+                ui.label("Selected source: Not Selected");
+            }
+
+            // TODO: add a table that shows the values of the source, make it scrollable.
         });
 
         egui::Panel::left("left_panel").show_animated_inside(ui, self.left_panel_expand, |ui| {
@@ -204,30 +276,37 @@ impl eframe::App for CertGen {
             if ui.button("Generate").clicked()
                 && let Some(path) = &self.image_path
             {
-                let mut img = image::ImageReader::open(path).unwrap().decode().unwrap();
-                let ui_image_ratio = self.image_size.x / img.width() as f32;
-                let ui_image_ratio_y = self.image_size.y / img.height() as f32;
-                for p in &self.placeholders {
-                    let font = self.font_vec_handles.get(&format!("{}", p.font_family)).unwrap();
-                    let intended_text_height = (p.rect.max.y - p.rect.min.y) / ui_image_ratio_y;
-                    // let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
-                    // let galley = ui.painter().layout_no_wrap(p.id.clone(), font_id, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255));
-                    let scale = ab_glyph::PxScale::from(
-                        intended_text_height
-                            / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
-                    );
-                    dbg!(scale);
-                    imageproc::drawing::draw_text_mut(
-                        &mut img,
-                        image::Rgba::from([0, 0, 0, 255]),
-                        (p.rect.min.x / ui_image_ratio) as i32,
-                        (p.rect.min.y / ui_image_ratio_y) as i32,
-                        scale,
-                        &font,
-                        &p.id,
-                    );
+                for (idx, row) in self.source.data.iter().enumerate() {
+                    let mut img = image::ImageReader::open(path).unwrap().decode().unwrap();
+                    let ui_image_ratio = self.image_size.x / img.width() as f32;
+                    let ui_image_ratio_y = self.image_size.y / img.height() as f32;
+                    for p in &self.placeholders {
+                        let font = self
+                            .font_vec_handles
+                            .get(&format!("{}", p.font_family))
+                            .unwrap();
+                        // TODO! The text height will change from each datum in the source, so it should
+                        // be recalculated when drawing.
+                        // let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
+                        // let galley = ui.painter().layout_no_wrap(p.id.clone(), font_id, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255));
+                        let intended_text_height = (p.rect.max.y - p.rect.min.y) / ui_image_ratio_y;
+                        let scale = ab_glyph::PxScale::from(
+                            intended_text_height
+                                / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
+                        );
+                        let text = &row[*self.source.access_hash.get(&p.id.clone()).unwrap()];
+                        imageproc::drawing::draw_text_mut(
+                            &mut img,
+                            image::Rgba::from([0, 0, 0, 255]),
+                            (p.rect.min.x / ui_image_ratio) as i32,
+                            (p.rect.min.y / ui_image_ratio_y) as i32,
+                            scale,
+                            &font,
+                            text,
+                        );
+                    }
+                    let _ = img.save(format!("Welcome_Certificate_new_{idx}.jpg"));
                 }
-                let _ = img.save("Welcome_Certificate_new.jpg");
             }
         });
 
@@ -362,15 +441,6 @@ impl eframe::App for CertGen {
 }
 
 fn main() -> Result<(), eframe::Error> {
-    // let mut img = ImageReader::open("Welcome_Certificate.jpg").unwrap().decode().unwrap();
-    //
-    // let font = FontRef::try_from_slice(include_bytes!("/usr/share/fonts/OTF/CodeNewRomanNerdFont-Regular.otf")).unwrap();
-    //
-    // let width = img.width();
-    // let height = img.height();
-    // drawing::draw_text_mut(&mut img, Rgba::from([120,120,120,255]), width as i32/2, height as i32/2, 200., &font, "Anjay");
-    // let _ = img.save("Welcome_Certificate_new.jpg");
-
     let native_options = eframe::NativeOptions::default();
 
     eframe::run_native(
