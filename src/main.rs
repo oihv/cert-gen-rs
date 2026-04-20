@@ -1,6 +1,8 @@
 use eframe::egui;
 use egui::{FontFamily, Sense};
 use std::{fs, time::SystemTime};
+
+use crate::font::{install_default_font, install_new_font};
 mod font;
 
 struct CertGen {
@@ -116,23 +118,24 @@ impl eframe::App for CertGen {
 
                 ui.separator();
 
+                // TODO: Change to selectable_value like screen alignment instead
                 egui::ComboBox::from_label("Text alignment")
                     .selected_text(format!("{:?}", self.placeholders[idx].text_align))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::LEFT_CENTER,
-                            "Align Left",
+                            "󰉢Align Left",
                         );
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::CENTER_CENTER,
-                            "Justify (Center)",
+                            "Justify (Center)",
                         );
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::RIGHT_CENTER,
-                            "Align Right",
+                            "󰉣Align Right",
                         );
                     });
 
@@ -170,7 +173,15 @@ impl eframe::App for CertGen {
             if ui.button("Install Local Font…").clicked()
                 && let Some(path) = rfd::FileDialog::new().pick_file()
             {
-                font::install_new_font(self, ui, path);
+                // egui::Context all points to the same context even when cloned (from docs)
+                font::install_new_font(self, &mut ui.ctx().clone(), path);
+            }
+
+            ui.separator();
+
+            if ui.button("Generate").clicked()
+            {
+
             }
         });
 
@@ -304,6 +315,7 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.set_debug_on_hover(false);
+            install_default_font(&mut cc.egui_ctx.clone());
             Ok(Box::new(CertGen::new(cc)))
         }),
     )

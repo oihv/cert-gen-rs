@@ -27,3 +27,4 @@ Include a data source for the placeholder to find the value for each individual.
 - [ ] Other styling functions (bold, italic) -> For now can be deferred to the user to select the style based on the font variation they install. -> But this function is really needed, think of a certificate where you need a whole paragraph to be typed (e.g. Mr. Tang as a **Coordinator of Media Division**), we would want this capability in the future.
 - [ ] Caching (installed fonts? project file to store the template image and the placeholders?)
 - [ ] Web version release
+- [ ] Since egui uses their own font for it's installation, let's just load a new default font for both egui and for placeholder (install a nerd font too so emojis are supported)

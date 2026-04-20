@@ -1,8 +1,8 @@
 use super::CertGen;
-pub fn install_new_font(app_data: &mut CertGen, ui: &mut egui::Ui, path: std::path::PathBuf) {
+pub fn install_new_font(app_data: &mut CertGen, ctx: &mut egui::Context, path: std::path::PathBuf) {
     match std::fs::read(&path) {
         Ok(font_bytes) => {
-            let mut fonts = ui.ctx().fonts(|f| f.definitions().clone());
+            let mut fonts = ctx.fonts(|f| f.definitions().clone());
 
             let mut path_clone = path.clone();
             path_clone.set_extension("");
@@ -22,7 +22,7 @@ pub fn install_new_font(app_data: &mut CertGen, ui: &mut egui::Ui, path: std::pa
                 vec![font_name.clone()],
             );
 
-            ui.ctx().set_fonts(fonts);
+            ctx.set_fonts(fonts);
             app_data
                 .available_fonts
                 .push(egui::FontFamily::Name(font_name.clone().into()));
@@ -31,4 +31,26 @@ pub fn install_new_font(app_data: &mut CertGen, ui: &mut egui::Ui, path: std::pa
             eprintln!("Failed to read font file: {err}");
         }
     }
+}
+
+pub fn install_default_font(ctx: &mut egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Install my own font (maybe supporting non-latin characters):
+    fonts.font_data.insert("my_font".to_owned(),
+       std::sync::Arc::new(
+           // .ttf and .otf supported
+           egui::FontData::from_static(include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf"))
+       )
+    );
+
+    // Put my font first (highest priority):
+    fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap()
+        .insert(0, "my_font".to_owned());
+
+    // Put my font as last fallback for monospace:
+    fonts.families.get_mut(&egui::FontFamily::Monospace).unwrap()
+        .push("my_font".to_owned());
+
+    ctx.set_fonts(fonts);
 }
