@@ -12,27 +12,37 @@ struct CertGen {
     focused_placeholder_idx: Option<usize>,
     scene_rect: egui::Rect,
     available_fonts: Vec<egui::FontFamily>,
-    // font_vec_fonts: HashMap: <egui::FontFamily, ab_glyph::FontVec>,
+    font_vec_handles: HashMap<String, ab_glyph::FontVec>,
 }
 
 impl Default for CertGen {
     fn default() -> Self {
         Self {
+            left_panel_expand: true,
             image_path: None,
             image_last_modified: SystemTime::UNIX_EPOCH,
             placeholders: Vec::new(),
             focused_placeholder_idx: None,
             scene_rect: egui::Rect::ZERO,
             available_fonts: vec![FontFamily::Proportional],
+            font_vec_handles: HashMap::new(),
         }
     }
 }
 
 impl CertGen {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        Self { ..Self::default() }
+        let mut ret = Self { ..Self::default() };
+        ret.font_vec_handles.insert(
+            format!("{}", FontFamily::Proportional),
+            ab_glyph::FontVec::try_from_vec(
+                // TODO: how to synchronize egui context default font installation and this?
+                include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf").to_vec(),
+            )
+            .unwrap(),
+        );
+        ret
     }
-
 }
 
 struct Placeholder {
@@ -61,7 +71,7 @@ impl Placeholder {
             pos: egui::Pos2::new(50., 50.),
             font_size,
             font_family: egui::FontFamily::Proportional,
-            text_align: egui::Align2::LEFT_TOP,
+            text_align: egui::Align2::LEFT_CENTER,
             screen_align: None,
         }
     }
@@ -72,9 +82,21 @@ impl eframe::App for CertGen {
         let ctx = ui.ctx().clone();
         egui::Panel::top("top panel").show_inside(ui, |ui| {
             ui.heading("HanTalk Certificate Maker");
+            if !self.left_panel_expand && ui.button("Control Panel").clicked() {
+                self.left_panel_expand = true;
+            }
         });
 
-        egui::Panel::left("side_panel").show_inside(ui, |ui| {
+        // TODO: make it collapsible too like the left panel
+        egui::Panel::right("right_panel").show_animated_inside(ui, true, |ui| {
+            ui.heading("Source Data Viewer");
+
+        });
+
+        egui::Panel::left("left_panel").show_animated_inside(ui, self.left_panel_expand, |ui| {
+            if ui.button("Collapse").clicked() {
+                self.left_panel_expand = false;
+            }
             ui.heading("Control Panel");
             if ui.button("Select Template…").clicked()
                 && let Some(path) = rfd::FileDialog::new().pick_file()
@@ -125,17 +147,17 @@ impl eframe::App for CertGen {
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::LEFT_CENTER,
-                            "󰉢Align Left",
+                            "󰉢 Align Left",
                         );
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::CENTER_CENTER,
-                            "Justify (Center)",
+                            " Justify (Center)",
                         );
                         ui.selectable_value(
                             &mut self.placeholders[idx].text_align,
                             egui::Align2::RIGHT_CENTER,
-                            "󰉣Align Right",
+                            "󰉣 Align Right",
                         );
                     });
 
@@ -174,14 +196,38 @@ impl eframe::App for CertGen {
                 && let Some(path) = rfd::FileDialog::new().pick_file()
             {
                 // egui::Context all points to the same context even when cloned (from docs)
-                font::install_new_font(self, &mut ui.ctx().clone(), path);
+                install_new_font(self, &mut ui.ctx().clone(), path);
             }
 
             ui.separator();
 
             if ui.button("Generate").clicked()
+                && let Some(path) = &self.image_path
             {
-
+                let mut img = image::ImageReader::open(path).unwrap().decode().unwrap();
+                let ui_image_ratio = self.image_size.x / img.width() as f32;
+                let ui_image_ratio_y = self.image_size.y / img.height() as f32;
+                for p in &self.placeholders {
+                    let font = self.font_vec_handles.get(&format!("{}", p.font_family)).unwrap();
+                    let intended_text_height = (p.rect.max.y - p.rect.min.y) / ui_image_ratio_y;
+                    // let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
+                    // let galley = ui.painter().layout_no_wrap(p.id.clone(), font_id, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255));
+                    let scale = ab_glyph::PxScale::from(
+                        intended_text_height
+                            / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
+                    );
+                    dbg!(scale);
+                    imageproc::drawing::draw_text_mut(
+                        &mut img,
+                        image::Rgba::from([0, 0, 0, 255]),
+                        (p.rect.min.x / ui_image_ratio) as i32,
+                        (p.rect.min.y / ui_image_ratio_y) as i32,
+                        scale,
+                        &font,
+                        &p.id,
+                    );
+                }
+                let _ = img.save("Welcome_Certificate_new.jpg");
             }
         });
 
@@ -194,7 +240,7 @@ impl eframe::App for CertGen {
                     if self.image_last_modified == SystemTime::UNIX_EPOCH {
                         self.image_last_modified = time;
                     } else if self.image_last_modified != time {
-                        ctx.forget_image(&format!("bytes://{path}"));
+                        ctx.forget_image(&format!("file://{path}"));
                         self.image_last_modified = time;
                         println!("image forgotten!: ${time:?}");
                     }
@@ -207,8 +253,20 @@ impl eframe::App for CertGen {
                 let mut is_any_placeholder_clicked = false;
 
                 let scene_res = scene.show(ui, &mut self.scene_rect, |ui| {
-                    let img_res = ui.image(egui::include_image!("../Welcome_Certificate_new.jpg"));
+                    // let img_res = ui.image(format!("file://{path}"));
+                    let img_res = egui::Image::new(format!("file://{path}"))
+                        .fit_to_original_size(1.)
+                        .ui(ui);
                     ui.label(format!("img_rect: {}", img_res.rect));
+
+                    if self.image_size.x != img_res.rect.max.x - img_res.rect.min.x
+                        || self.image_size.y != img_res.rect.max.y - img_res.rect.min.y
+                    {
+                        self.image_size = egui::Vec2::new(
+                            img_res.rect.max.x - img_res.rect.min.x,
+                            img_res.rect.max.y - img_res.rect.min.y,
+                        );
+                    }
 
                     // Draw each placeholder's text
                     for (idx, p) in self.placeholders.iter_mut().enumerate() {
@@ -217,15 +275,21 @@ impl eframe::App for CertGen {
                             match align {
                                 TextImageAlign::Horizontal => {
                                     let img_width = img_res.rect.max.x - img_res.rect.min.x;
+                                    // let img_width = self.image_size.x;
                                     let p_width = p.rect.max.x - p.rect.min.x;
                                     match p.text_align {
-                                        egui::Align2::LEFT_CENTER => p.pos.x = img_width / 2. - p_width / 2.,
+                                        egui::Align2::LEFT_CENTER => {
+                                            p.pos.x = img_width / 2. - p_width / 2.
+                                        }
                                         egui::Align2::CENTER_CENTER => p.pos.x = img_width / 2.,
-                                        egui::Align2::RIGHT_CENTER => p.pos.x = img_width / 2. + p_width / 2.,
+                                        egui::Align2::RIGHT_CENTER => {
+                                            p.pos.x = img_width / 2. + p_width / 2.
+                                        }
                                         _ => (),
                                     }
                                 }
                                 TextImageAlign::Vertical => {
+                                    // let img_height = self.image_size.y;
                                     let img_height = img_res.rect.max.y - img_res.rect.min.y;
                                     let p_height = p.rect.max.y - p.rect.min.y;
                                     p.pos.y = img_height / 2. - p_height / 2.;
