@@ -1,4 +1,5 @@
 use super::CertGen;
+use egui::{FontFamily, FontData};
 pub fn install_new_font(app_data: &mut CertGen, ctx: &mut egui::Context, path: std::path::PathBuf) {
     match std::fs::read(&path) {
         Ok(font_bytes) => {
@@ -15,17 +16,25 @@ pub fn install_new_font(app_data: &mut CertGen, ctx: &mut egui::Context, path: s
 
             fonts.font_data.insert(
                 font_name.clone(),
-                std::sync::Arc::new(egui::FontData::from_owned(font_bytes)),
+                std::sync::Arc::new(FontData::from_owned(font_bytes.clone())),
             );
             fonts.families.insert(
-                egui::FontFamily::Name(font_name.clone().into()),
+                FontFamily::Name(font_name.clone().into()),
                 vec![font_name.clone()],
             );
 
             ctx.set_fonts(fonts);
             app_data
                 .available_fonts
-                .push(egui::FontFamily::Name(font_name.clone().into()));
+                .push(FontFamily::Name(font_name.clone().into()));
+
+            app_data.font_vec_handles.insert(
+                format!("{}", FontFamily::Name(font_name.clone().into())),
+                ab_glyph::FontVec::try_from_vec(
+                    font_bytes.to_vec(),
+                )
+                .unwrap(),
+            );
         }
         Err(err) => {
             eprintln!("Failed to read font file: {err}");
@@ -37,19 +46,26 @@ pub fn install_default_font(ctx: &mut egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
     // Install my own font (maybe supporting non-latin characters):
-    fonts.font_data.insert("my_font".to_owned(),
-       std::sync::Arc::new(
-           // .ttf and .otf supported
-           egui::FontData::from_static(include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf"))
-       )
+    fonts.font_data.insert(
+        "my_font".to_owned(),
+        std::sync::Arc::new(
+            // .ttf and .otf supported
+            egui::FontData::from_static(include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf")),
+        ),
     );
 
     // Put my font first (highest priority):
-    fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap()
+    fonts
+        .families
+        .get_mut(&egui::FontFamily::Proportional)
+        .unwrap()
         .insert(0, "my_font".to_owned());
 
     // Put my font as last fallback for monospace:
-    fonts.families.get_mut(&egui::FontFamily::Monospace).unwrap()
+    fonts
+        .families
+        .get_mut(&egui::FontFamily::Monospace)
+        .unwrap()
         .push("my_font".to_owned());
 
     ctx.set_fonts(fonts);
