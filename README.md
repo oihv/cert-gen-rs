@@ -18,7 +18,7 @@ Include a data source for the placeholder to find the value for each individual.
 - [x] Find how to find the position value of the text relative to the image (apparently this is pretty weird, since I have to first set egui to display the image to its original size, before being able to mirror the drawing of the text on top of the image with imageproc. Previous attempt with finding ratio fails a bit with the width of the text by imageproc, I think it is because the floating point precision can't get the exact ratio)
 - [x] Find how to get imageproc to also interpret the installed font. (We must load it twice. egui and ab_glyph) (built a hashmap in the app data, font_vec_handles, that uses the display format of the font_family, and it points to the fontvec that got processed at the same time when local fonts are also installed)
 - [x] Get the first batch of certificate made by this project, hurray.
-- [ ] Preview mode (check the first value in the data source and display it in a popup window)
+- [ ] Preview mode (display the values of the source in the image)
 - [ ] Add automatic values too (e.g. date, but this can also be automated inside excel anyway)
 - [ ] Make control panel more neat by placing them in a grid instead
 - [x] Set alignment of the placeholder (vertically centered / horizontally centered)
@@ -31,4 +31,7 @@ Include a data source for the placeholder to find the value for each individual.
 - [x] Since egui uses their own font for it's installation, let's just load a new default font for both egui and for placeholder (install a nerd font too so emojis are supported)
 - [ ] Warning when there's column in source data that doesn't have the corresponding placeholder
 - [ ] think about how to propagate the error, handle it, instead of just panicking.
-- [ ] Handle alignment when drawing
+- [x] Handle alignment when drawing
+- [ ] Add a notification popup that shows that some action is completed (loading a file, loading source, generating)
+- [ ] Shows loading bar when generating instead of just freezing
+- [ ] CLI version???

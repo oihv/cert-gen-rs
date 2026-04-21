@@ -1,9 +1,10 @@
 use eframe::egui;
-use egui::{FontFamily, Sense, Widget};
+use egui::{Align2, FontFamily, Sense, Widget};
 use std::collections::HashMap;
 use std::{fs, time::SystemTime};
 
 mod font;
+mod text;
 use crate::font::{install_default_font, install_new_font};
 
 struct Source {
@@ -285,20 +286,17 @@ impl eframe::App for CertGen {
                             .font_vec_handles
                             .get(&format!("{}", p.font_family))
                             .unwrap();
-                        // TODO! The text height will change from each datum in the source, so it should
-                        // be recalculated when drawing.
-                        // let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
-                        // let galley = ui.painter().layout_no_wrap(p.id.clone(), font_id, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255));
+                        let text = &row[*self.source.access_hash.get(&p.id.clone()).unwrap_or_else(|| panic!("Error: {} is not found in the source hash.", p.id))];
+                        let pos_x = text::calculate_text_position_by_alignment(ui, p, text);
                         let intended_text_height = (p.rect.max.y - p.rect.min.y) / ui_image_ratio_y;
                         let scale = ab_glyph::PxScale::from(
                             intended_text_height
                                 / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
                         );
-                        let text = &row[*self.source.access_hash.get(&p.id.clone()).unwrap()];
                         imageproc::drawing::draw_text_mut(
                             &mut img,
                             image::Rgba::from([0, 0, 0, 255]),
-                            (p.rect.min.x / ui_image_ratio) as i32,
+                            (pos_x / ui_image_ratio) as i32,
                             (p.rect.min.y / ui_image_ratio_y) as i32,
                             scale,
                             &font,
