@@ -106,6 +106,7 @@ struct Placeholder {
     id: String,
     rect: egui::Rect,
     pos: egui::Pos2,
+    color: egui::Color32,
     font_size: f32,
     font_family: egui::FontFamily,
     text_align: egui::Align2,
@@ -126,6 +127,7 @@ impl Placeholder {
                 egui::Vec2 { x: 500., y: 500. },
             ),
             pos: egui::Pos2::new(50., 50.),
+            color: egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255),
             font_size,
             font_family: egui::FontFamily::Proportional,
             text_align: egui::Align2::LEFT_CENTER,
@@ -198,37 +200,40 @@ impl eframe::App for CertGen {
             ui.separator();
 
             if let Some(idx) = self.focused_placeholder_idx {
+                let p = &mut self.placeholders[idx];
                 ui.add(
-                    egui::Slider::new(&mut self.placeholders[idx].font_size, 1.0..=100.0)
+                    egui::Slider::new(&mut p.font_size, 1.0..=100.0)
                         .text("Font Size"),
                 );
                 ui.horizontal(|ui| {
                     if ui.button("+").clicked() {
-                        self.placeholders[idx].font_size += 1.;
+                        p.font_size += 1.;
                     }
                     if ui.button("-").clicked() {
-                        self.placeholders[idx].font_size -= 1.;
+                        p.font_size -= 1.;
                     }
                 });
 
                 ui.separator();
 
+                ui.color_edit_button_srgba(&mut p.color);
+
                 // TODO: Change to selectable_value like screen alignment instead
                 egui::ComboBox::from_label("Text alignment")
-                    .selected_text(format!("{:?}", self.placeholders[idx].text_align))
+                    .selected_text(format!("{:?}", p.text_align))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.placeholders[idx].text_align,
+                            &mut p.text_align,
                             egui::Align2::LEFT_CENTER,
                             "󰉢 Align Left",
                         );
                         ui.selectable_value(
-                            &mut self.placeholders[idx].text_align,
+                            &mut p.text_align,
                             egui::Align2::CENTER_CENTER,
                             " Justify (Center)",
                         );
                         ui.selectable_value(
-                            &mut self.placeholders[idx].text_align,
+                            &mut p.text_align,
                             egui::Align2::RIGHT_CENTER,
                             "󰉣 Align Right",
                         );
@@ -237,19 +242,19 @@ impl eframe::App for CertGen {
                 ui.separator();
                 ui.horizontal(|ui| {
                     if ui.button("󰘞").clicked() {
-                        self.placeholders[idx].screen_align = Some(TextImageAlign::Horizontal);
+                        p.screen_align = Some(TextImageAlign::Horizontal);
                     }
                     if ui.button("󰘢").clicked() {
-                        self.placeholders[idx].screen_align = Some(TextImageAlign::Vertical);
+                        p.screen_align = Some(TextImageAlign::Vertical);
                     }
                 });
 
                 egui::ComboBox::from_label("Choose font")
-                    .selected_text(format!("{}", self.placeholders[idx].font_family))
+                    .selected_text(format!("{}", p.font_family))
                     .show_ui(ui, |ui| {
                         for font in self.available_fonts.clone() {
                             ui.selectable_value(
-                                &mut self.placeholders[idx].font_family,
+                                &mut p.font_family,
                                 font.clone(),
                                 format!("{}", font),
                             );
@@ -262,8 +267,8 @@ impl eframe::App for CertGen {
                     self.focused_placeholder_idx = None;
                     self.placeholders.remove(idx);
                 }
+                ui.separator();
             }
-            ui.separator();
 
             if ui.button("Install Local Font…").clicked()
                 && let Some(path) = rfd::FileDialog::new().pick_file()
@@ -293,9 +298,11 @@ impl eframe::App for CertGen {
                             intended_text_height
                                 / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
                         );
+
+                        let color = image::Rgba::from([p.color.r(), p.color.g(), p.color.b(), p.color.a()]);
                         imageproc::drawing::draw_text_mut(
                             &mut img,
-                            image::Rgba::from([0, 0, 0, 255]),
+                            color,
                             (pos_x / ui_image_ratio) as i32,
                             (p.rect.min.y / ui_image_ratio_y) as i32,
                             scale,
@@ -381,7 +388,7 @@ impl eframe::App for CertGen {
                             p.text_align,
                             &p.id,
                             font_id.clone(),
-                            egui::Color32::BLACK,
+                            p.color,
                         );
                         // Get input with the placeholder
                         let p_res =
