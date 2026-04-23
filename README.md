@@ -20,7 +20,7 @@ Include a data source for the placeholder to find the value for each individual.
 - [x] Get the first batch of certificate made by this project, hurray.
 - [ ] Preview mode (display the values of the source in the image)
 - [ ] Add automatic values too (e.g. date, but this can also be automated inside excel anyway)
-- [ ] Make control panel more neat by placing them in a grid instead
+- [x] Make control panel more neat by placing them in a grid instead
 - [x] Set alignment of the placeholder (vertically centered / horizontally centered)
 - [x] wrap mode (justify, align left/right)
 - [x] Color picker
