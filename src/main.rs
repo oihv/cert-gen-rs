@@ -1,60 +1,16 @@
 use eframe::egui;
-use egui::{Align2, FontFamily, Sense, Widget};
+use egui::{FontFamily, Sense, Widget};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::{fs, time::SystemTime};
 
 mod font;
-mod text;
 use crate::font::{install_default_font, install_new_font};
-
-struct Source {
-    path: Option<String>,
-    last_modified: SystemTime,
-    data: Vec<Vec<String>>,
-    access_hash: HashMap<String, usize>,
-}
-
-impl Default for Source {
-    fn default() -> Self {
-        Self {
-            path: None,
-            last_modified: std::time::UNIX_EPOCH,
-            data: Vec::new(),
-            access_hash: HashMap::new(),
-        }
-    }
-}
-
-impl Source {
-    fn load_data(&mut self, path: std::path::PathBuf) {
-        match std::fs::read_to_string(path) {
-            Ok(string) => {
-                let mut lines = string.lines();
-
-                if lines.clone().count() == 0 {
-                    // TODO: propagate the error, show it in the UI
-                    panic!("Error: source file doesn't have any content.");
-                }
-                // TODO: how to check whether or not the file doesn't have a header?
-                // Get the first line
-                let line = lines.next().unwrap();
-                for (idx, key) in line.split(',').enumerate() {
-                    self.access_hash.insert(key.to_string(), idx);
-                }
-
-                // Populate the data vec
-                for line in lines {
-                    let mut row: Vec<String> = Vec::new();
-                    for datum in line.split(',') {
-                        row.push(datum.to_string());
-                    }
-                    self.data.push(row);
-                }
-            }
-            Err(e) => panic!("Error while reading source file: {e}"),
-        }
-    }
-}
+mod generate;
+mod text;
+mod source;
+use crate::source::Source;
 
 struct CertGen {
     left_panel_expand: bool,
@@ -67,7 +23,8 @@ struct CertGen {
     focused_placeholder_idx: Option<usize>,
     scene_rect: egui::Rect,
     available_fonts: Vec<egui::FontFamily>,
-    font_vec_handles: HashMap<String, ab_glyph::FontVec>,
+    font_vec_handles: HashMap<String, Vec<u8>>,
+    generate_progress: Option<Arc<Mutex<f32>>>,
 }
 
 impl Default for CertGen {
@@ -83,6 +40,7 @@ impl Default for CertGen {
             scene_rect: egui::Rect::ZERO,
             available_fonts: vec![FontFamily::Proportional],
             font_vec_handles: HashMap::new(),
+            generate_progress: None,
         }
     }
 }
@@ -92,16 +50,14 @@ impl CertGen {
         let mut ret = Self { ..Self::default() };
         ret.font_vec_handles.insert(
             format!("{}", FontFamily::Proportional),
-            ab_glyph::FontVec::try_from_vec(
-                // TODO: how to synchronize egui context default font installation and this?
-                include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf").to_vec(),
-            )
-            .unwrap(),
+            // TODO: how to synchronize egui context default font installation and this?
+            include_bytes!("../CaskaydiaCoveNerdFont-Light.ttf").to_vec(),
         );
         ret
     }
 }
 
+#[derive(Clone)]
 struct Placeholder {
     id: String,
     rect: egui::Rect,
@@ -113,6 +69,7 @@ struct Placeholder {
     screen_align: Option<TextImageAlign>,
 }
 
+#[derive(Clone)]
 enum TextImageAlign {
     Horizontal,
     Vertical,
@@ -201,10 +158,7 @@ impl eframe::App for CertGen {
 
             if let Some(idx) = self.focused_placeholder_idx {
                 let p = &mut self.placeholders[idx];
-                ui.add(
-                    egui::Slider::new(&mut p.font_size, 1.0..=100.0)
-                        .text("Font Size"),
-                );
+                ui.add(egui::Slider::new(&mut p.font_size, 1.0..=500.0).text("Font Size"));
                 ui.horizontal(|ui| {
                     if ui.button("+").clicked() {
                         p.font_size += 1.;
@@ -282,36 +236,31 @@ impl eframe::App for CertGen {
             if ui.button("Generate").clicked()
                 && let Some(path) = &self.image_path
             {
-                for (idx, row) in self.source.data.iter().enumerate() {
-                    let mut img = image::ImageReader::open(path).unwrap().decode().unwrap();
-                    let ui_image_ratio = self.image_size.x / img.width() as f32;
-                    let ui_image_ratio_y = self.image_size.y / img.height() as f32;
-                    for p in &self.placeholders {
-                        let font = self
-                            .font_vec_handles
-                            .get(&format!("{}", p.font_family))
-                            .unwrap();
-                        let text = &row[*self.source.access_hash.get(&p.id.clone()).unwrap_or_else(|| panic!("Error: {} is not found in the source hash.", p.id))];
-                        let pos_x = text::calculate_text_position_by_alignment(ui, p, text);
-                        let intended_text_height = (p.rect.max.y - p.rect.min.y) / ui_image_ratio_y;
-                        let scale = ab_glyph::PxScale::from(
-                            intended_text_height
-                                / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
-                        );
+                self.generate_progress = Some(Arc::new(Mutex::new(0.)));
+                // Clones of CertGen fields to be moved inside the closure
+                let generate_progress = self.generate_progress.as_ref().unwrap().clone();
+                let data = self.source.data.clone();
+                let placeholders = self.placeholders.clone();
+                let path = path.clone();
+                let font_vec_handles = self.font_vec_handles.clone();
+                let access_hash = self.source.access_hash.clone();
+                let img_src = image::ImageReader::open(path).unwrap().decode().unwrap();
+                let ctx = ui.ctx().clone();
 
-                        let color = image::Rgba::from([p.color.r(), p.color.g(), p.color.b(), p.color.a()]);
-                        imageproc::drawing::draw_text_mut(
-                            &mut img,
-                            color,
-                            (pos_x / ui_image_ratio) as i32,
-                            (p.rect.min.y / ui_image_ratio_y) as i32,
-                            scale,
-                            &font,
-                            text,
-                        );
-                    }
-                    let _ = img.save(format!("Welcome_Certificate_new_{idx}.jpg"));
+                thread::spawn(move || {
+                    generate::generate_certificates(generate_progress, data, placeholders, font_vec_handles, access_hash, img_src, ctx);
+                });
+            }
+            if let Some(prog) = &self.generate_progress {
+                let mut prog_copy = 0.;
+                if let Ok(prog) = prog.try_lock() {
+                    prog_copy = *prog;
+                    ui.add(egui::widgets::ProgressBar::new(prog_copy).show_percentage());
                 }
+                if prog_copy == 1. {
+                    self.generate_progress = None;
+                }
+                dbg!(prog_copy);
             }
         });
 
@@ -383,13 +332,9 @@ impl eframe::App for CertGen {
                         }
 
                         let font_id = egui::FontId::new(p.font_size, p.font_family.clone());
-                        p.rect = ui.painter().text(
-                            p.pos,
-                            p.text_align,
-                            &p.id,
-                            font_id.clone(),
-                            p.color,
-                        );
+                        p.rect =
+                            ui.painter()
+                                .text(p.pos, p.text_align, &p.id, font_id.clone(), p.color);
                         // Get input with the placeholder
                         let p_res =
                             ui.interact(p.rect, egui::Id::new(idx), Sense::click_and_drag());

@@ -30,10 +30,7 @@ pub fn install_new_font(app_data: &mut CertGen, ctx: &mut egui::Context, path: s
 
             app_data.font_vec_handles.insert(
                 format!("{}", FontFamily::Name(font_name.clone().into())),
-                ab_glyph::FontVec::try_from_vec(
-                    font_bytes.to_vec(),
-                )
-                .unwrap(),
+                font_bytes,
             );
         }
         Err(err) => {

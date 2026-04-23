@@ -33,5 +33,5 @@ Include a data source for the placeholder to find the value for each individual.
 - [ ] think about how to propagate the error, handle it, instead of just panicking.
 - [x] Handle alignment when drawing
 - [ ] Add a notification popup that shows that some action is completed (loading a file, loading source, generating)
-- [ ] Shows loading bar when generating instead of just freezing
+- [x] Shows loading bar when generating instead of just freezing
 - [ ] CLI version??? (what for? ofc for fast automation, pass in the template file, comma separated value, and boom)
