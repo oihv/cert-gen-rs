@@ -8,8 +8,8 @@ use std::{fs, time::SystemTime};
 mod font;
 use crate::font::{install_default_font, install_new_font};
 mod generate;
-mod text;
 mod source;
+mod text;
 use crate::source::Source;
 
 struct CertGen {
@@ -97,14 +97,14 @@ impl eframe::App for CertGen {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         egui::Panel::top("top panel").show_inside(ui, |ui| {
-            ui.heading("HanTalk Certificate Maker");
+            ui.heading("CertGen - Certificate Generator");
             if !self.left_panel_expand && ui.button("Control Panel").clicked() {
                 self.left_panel_expand = true;
             }
         });
 
         // TODO: make it collapsible too like the left panel
-        egui::Panel::right("right_panel").show_animated_inside(ui, true, |ui| {
+        egui::Panel::right("right_panel").min_size(ui.available_size().x * 0.15).show_animated_inside(ui, true, |ui| {
             ui.heading("Source Data Viewer");
             ui.separator();
 
@@ -125,7 +125,7 @@ impl eframe::App for CertGen {
             // TODO: add a table that shows the values of the source, make it scrollable.
         });
 
-        egui::Panel::left("left_panel").show_animated_inside(ui, self.left_panel_expand, |ui| {
+        egui::Panel::left("left_panel").min_size(ui.available_size().x * 0.25).show_animated_inside(ui, self.left_panel_expand, |ui| {
             if ui.button("Collapse").clicked() {
                 self.left_panel_expand = false;
             }
@@ -140,6 +140,7 @@ impl eframe::App for CertGen {
             } else {
                 ui.label("Selected image: Not Selected");
             }
+            ui.separator();
 
             ui.collapsing("Placeholders", |ui| {
                 for (idx, p) in self.placeholders.iter_mut().enumerate() {
@@ -158,64 +159,76 @@ impl eframe::App for CertGen {
 
             if let Some(idx) = self.focused_placeholder_idx {
                 let p = &mut self.placeholders[idx];
-                ui.add(egui::Slider::new(&mut p.font_size, 1.0..=500.0).text("Font Size"));
-                ui.horizontal(|ui| {
-                    if ui.button("+").clicked() {
-                        p.font_size += 1.;
-                    }
-                    if ui.button("-").clicked() {
-                        p.font_size -= 1.;
-                    }
-                });
+                egui::Grid::new("my_grid")
+                    .num_columns(2)
+                    .spacing([40.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.label("Font Size");
+                        ui.add(egui::Slider::new(&mut p.font_size, 1.0..=500.0));
+                        ui.horizontal(|ui| {
+                            if ui.button("+").clicked() {
+                                p.font_size += 1.;
+                            }
+                            if ui.button("-").clicked() {
+                                p.font_size -= 1.;
+                            }
+                        });
 
-                ui.separator();
+                        ui.end_row();
 
-                ui.color_edit_button_srgba(&mut p.color);
+                        ui.label("Color");
+                        ui.color_edit_button_srgba(&mut p.color);
 
-                // TODO: Change to selectable_value like screen alignment instead
-                egui::ComboBox::from_label("Text alignment")
-                    .selected_text(format!("{:?}", p.text_align))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut p.text_align,
-                            egui::Align2::LEFT_CENTER,
-                            "󰉢 Align Left",
-                        );
-                        ui.selectable_value(
-                            &mut p.text_align,
-                            egui::Align2::CENTER_CENTER,
-                            " Justify (Center)",
-                        );
-                        ui.selectable_value(
-                            &mut p.text_align,
-                            egui::Align2::RIGHT_CENTER,
-                            "󰉣 Align Right",
-                        );
+                        ui.end_row();
+
+                        ui.label("Alignment");
+                        egui::ComboBox::from_id_salt("Text alignment")
+                            .selected_text(format!("{:?}", p.text_align))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut p.text_align,
+                                    egui::Align2::LEFT_CENTER,
+                                    "󰉢 Align Left",
+                                );
+                                ui.selectable_value(
+                                    &mut p.text_align,
+                                    egui::Align2::CENTER_CENTER,
+                                    " Justify (Center)",
+                                );
+                                ui.selectable_value(
+                                    &mut p.text_align,
+                                    egui::Align2::RIGHT_CENTER,
+                                    "󰉣 Align Right",
+                                );
+                            });
+
+                        ui.end_row();
+                        ui.label("Position");
+                        ui.horizontal(|ui| {
+                            if ui.button("󰘞").clicked() {
+                                p.screen_align = Some(TextImageAlign::Horizontal);
+                            }
+                            if ui.button("󰘢").clicked() {
+                                p.screen_align = Some(TextImageAlign::Vertical);
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("Font");
+                        egui::ComboBox::from_label("Font")
+                            .selected_text(format!("{}", p.font_family))
+                            .show_ui(ui, |ui| {
+                                for font in self.available_fonts.clone() {
+                                    ui.selectable_value(
+                                        &mut p.font_family,
+                                        font.clone(),
+                                        format!("{}", font),
+                                    );
+                                }
+                            });
+                        ui.end_row();
+
                     });
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    if ui.button("󰘞").clicked() {
-                        p.screen_align = Some(TextImageAlign::Horizontal);
-                    }
-                    if ui.button("󰘢").clicked() {
-                        p.screen_align = Some(TextImageAlign::Vertical);
-                    }
-                });
-
-                egui::ComboBox::from_label("Choose font")
-                    .selected_text(format!("{}", p.font_family))
-                    .show_ui(ui, |ui| {
-                        for font in self.available_fonts.clone() {
-                            ui.selectable_value(
-                                &mut p.font_family,
-                                font.clone(),
-                                format!("{}", font),
-                            );
-                        }
-                    });
-
-                ui.separator();
 
                 if ui.button("Delete").clicked() {
                     self.focused_placeholder_idx = None;
@@ -248,7 +261,15 @@ impl eframe::App for CertGen {
                 let ctx = ui.ctx().clone();
 
                 thread::spawn(move || {
-                    generate::generate_certificates(generate_progress, data, placeholders, font_vec_handles, access_hash, img_src, ctx);
+                    generate::generate_certificates(
+                        generate_progress,
+                        data,
+                        placeholders,
+                        font_vec_handles,
+                        access_hash,
+                        img_src,
+                        ctx,
+                    );
                 });
             }
             if let Some(prog) = &self.generate_progress {
@@ -394,7 +415,7 @@ fn main() -> Result<(), eframe::Error> {
     let native_options = eframe::NativeOptions::default();
 
     eframe::run_native(
-        "HanTalk Certificate Maker",
+        "CertGen",
         native_options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
