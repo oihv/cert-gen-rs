@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::{fs, time::SystemTime};
 
+mod parser;
 mod font;
 use crate::font::{install_default_font, install_new_font};
 mod generate;
@@ -24,7 +25,10 @@ struct CertGen {
     scene_rect: egui::Rect,
     available_fonts: Vec<egui::FontFamily>,
     font_vec_handles: HashMap<String, Vec<u8>>,
+    // TODO: move to another struct too, just like source
     generate_progress: Option<Arc<Mutex<f32>>>,
+    generate_template: String,
+    generate_dir: Option<String>,
 }
 
 impl Default for CertGen {
@@ -41,6 +45,8 @@ impl Default for CertGen {
             available_fonts: vec![FontFamily::Proportional],
             font_vec_handles: HashMap::new(),
             generate_progress: None,
+            generate_template: String::new(),
+            generate_dir: None,
         }
     }
 }
@@ -123,6 +129,21 @@ impl eframe::App for CertGen {
             }
 
             // TODO: add a table that shows the values of the source, make it scrollable.
+
+            ui.separator();
+
+            ui.text_edit_singleline(&mut self.generate_template);
+
+            if ui.button("Select output directory…").clicked()
+                && let Some(path) = rfd::FileDialog::new().pick_folder()
+            {
+                self.generate_dir = Some(path.display().to_string());
+            }
+            if let Some(path) = &self.generate_dir {
+                ui.label(format!("Selected directory: {path}"));
+            } else {
+                ui.label("Selected directory: Not Selected (Default to same directory as image)");
+            }
         });
 
         egui::Panel::left("left_panel").min_size(ui.available_size().x * 0.25).show_animated_inside(ui, self.left_panel_expand, |ui| {
@@ -259,6 +280,8 @@ impl eframe::App for CertGen {
                 let access_hash = self.source.access_hash.clone();
                 let img_src = image::ImageReader::open(path).unwrap().decode().unwrap();
                 let ctx = ui.ctx().clone();
+                let generate_dir = self.generate_dir.clone();
+                let generate_template = self.generate_template.clone();
 
                 thread::spawn(move || {
                     generate::generate_certificates(
@@ -269,6 +292,8 @@ impl eframe::App for CertGen {
                         access_hash,
                         img_src,
                         ctx,
+                        generate_dir,
+                        generate_template
                     );
                 });
             }
