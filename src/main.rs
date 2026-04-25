@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::{fs, time::SystemTime};
 
-mod parser;
 mod font;
+mod parser;
 use crate::font::{install_default_font, install_new_font};
 mod generate;
 mod source;
@@ -110,205 +110,242 @@ impl eframe::App for CertGen {
         });
 
         // TODO: make it collapsible too like the left panel
-        egui::Panel::right("right_panel").min_size(ui.available_size().x * 0.15).show_animated_inside(ui, true, |ui| {
-            ui.heading("Source Data Viewer");
-            ui.separator();
+        egui::Panel::right("right_panel")
+            .min_size(ui.available_size().x * 0.15)
+            .show_animated_inside(ui, true, |ui| {
+                ui.heading("Source Data Viewer");
+                ui.separator();
 
-            if ui.button("Select Source…").clicked()
-                && let Some(path) = rfd::FileDialog::new().pick_file()
-            {
-                self.source.path = Some(path.display().to_string());
-                // TODO! reload the data if the file has been modified.
-                self.source.load_data(path);
-            }
+                if ui.button("Select Source…").clicked()
+                    && let Some(path) = rfd::FileDialog::new().pick_file()
+                {
+                    self.source.path = Some(path.display().to_string());
+                    // TODO! reload the data if the file has been modified.
+                    self.source.load_data(path);
+                }
 
-            if let Some(path) = &self.source.path {
-                ui.label(format!("Selected source: {path}"));
-            } else {
-                ui.label("Selected source: Not Selected");
-            }
+                if let Some(path) = &self.source.path {
+                    ui.label(format!("Selected source: {path}"));
+                    ui.separator();
+                    egui::ScrollArea::both()
+                        .max_height(ui.available_height() * 0.25)
+                        .show(ui, |ui| {
+                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-            // TODO: add a table that shows the values of the source, make it scrollable.
+                            ui.set_max_height(200.);
+                            // TODO: add a table that shows the values of the source, make it scrollable.
+                            egui::Grid::new("source_grid")
+                                .num_columns(self.source.data[0].len())
+                                // .spacing([40.0, 4.0])
+                                .striped(true)
+                                .show(ui, |ui| {
+                                    for header in &self.source.header {
+                                        // TODO: how to center this?
+                                        ui.label(
+                                            egui::RichText::new(header)
+                                                .color(egui::Color32::BLACK)
+                                                .background_color(egui::Color32::LIGHT_GRAY),
+                                        );
+                                    }
+                                    ui.end_row();
+                                    for row in &self.source.data {
+                                        for val in row {
+                                            ui.label(val.to_string());
+                                        }
+                                        ui.end_row();
+                                    }
+                                })
+                        });
+                } else {
+                    ui.label("Selected source: Not Selected");
+                }
 
-            ui.separator();
+                ui.separator();
 
-            ui.text_edit_singleline(&mut self.generate_template);
+                ui.label("File name template");
+                ui.text_edit_singleline(&mut self.generate_template);
 
-            if ui.button("Select output directory…").clicked()
-                && let Some(path) = rfd::FileDialog::new().pick_folder()
-            {
-                self.generate_dir = Some(path.display().to_string());
-            }
-            if let Some(path) = &self.generate_dir {
-                ui.label(format!("Selected directory: {path}"));
-            } else {
-                ui.label("Selected directory: Not Selected (Default to same directory as image)");
-            }
-        });
-
-        egui::Panel::left("left_panel").min_size(ui.available_size().x * 0.25).show_animated_inside(ui, self.left_panel_expand, |ui| {
-            if ui.button("Collapse").clicked() {
-                self.left_panel_expand = false;
-            }
-            ui.heading("Control Panel");
-            if ui.button("Select Template…").clicked()
-                && let Some(path) = rfd::FileDialog::new().pick_file()
-            {
-                self.image_path = Some(path.display().to_string());
-            }
-            if let Some(path) = &self.image_path {
-                ui.label(format!("Selected image: {path}"));
-            } else {
-                ui.label("Selected image: Not Selected");
-            }
-            ui.separator();
-
-            ui.collapsing("Placeholders", |ui| {
-                for (idx, p) in self.placeholders.iter_mut().enumerate() {
-                    let response = ui.text_edit_singleline(&mut p.id);
-                    if response.gained_focus() {
-                        self.focused_placeholder_idx = Some(idx);
-                    }
+                ui.separator();
+                if ui.button("Select output directory…").clicked()
+                    && let Some(path) = rfd::FileDialog::new().pick_folder()
+                {
+                    self.generate_dir = Some(path.display().to_string());
+                }
+                if let Some(path) = &self.generate_dir {
+                    ui.label(format!("Selected directory: {path}"));
+                } else {
+                    ui.label(
+                        "Selected directory: Not Selected (Default to same directory as image)",
+                    );
                 }
             });
 
-            if ui.button("+ Add a new placeholder").clicked() {
-                self.placeholders
-                    .push(Placeholder::new("New Placeholder", 16.));
-            }
-            ui.separator();
-
-            if let Some(idx) = self.focused_placeholder_idx {
-                let p = &mut self.placeholders[idx];
-                egui::Grid::new("my_grid")
-                    .num_columns(2)
-                    .spacing([40.0, 4.0])
-                    .striped(true)
-                    .show(ui, |ui| {
-                        ui.label("Font Size");
-                        ui.add(egui::Slider::new(&mut p.font_size, 1.0..=500.0));
-                        ui.horizontal(|ui| {
-                            if ui.button("+").clicked() {
-                                p.font_size += 1.;
-                            }
-                            if ui.button("-").clicked() {
-                                p.font_size -= 1.;
-                            }
-                        });
-
-                        ui.end_row();
-
-                        ui.label("Color");
-                        ui.color_edit_button_srgba(&mut p.color);
-
-                        ui.end_row();
-
-                        ui.label("Alignment");
-                        egui::ComboBox::from_id_salt("Text alignment")
-                            .selected_text(format!("{:?}", p.text_align))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut p.text_align,
-                                    egui::Align2::LEFT_CENTER,
-                                    "󰉢 Align Left",
-                                );
-                                ui.selectable_value(
-                                    &mut p.text_align,
-                                    egui::Align2::CENTER_CENTER,
-                                    " Justify (Center)",
-                                );
-                                ui.selectable_value(
-                                    &mut p.text_align,
-                                    egui::Align2::RIGHT_CENTER,
-                                    "󰉣 Align Right",
-                                );
-                            });
-
-                        ui.end_row();
-                        ui.label("Position");
-                        ui.horizontal(|ui| {
-                            if ui.button("󰘞").clicked() {
-                                p.screen_align = Some(TextImageAlign::Horizontal);
-                            }
-                            if ui.button("󰘢").clicked() {
-                                p.screen_align = Some(TextImageAlign::Vertical);
-                            }
-                        });
-                        ui.end_row();
-                        ui.label("Font");
-                        egui::ComboBox::from_label("Font")
-                            .selected_text(format!("{}", p.font_family))
-                            .show_ui(ui, |ui| {
-                                for font in self.available_fonts.clone() {
-                                    ui.selectable_value(
-                                        &mut p.font_family,
-                                        font.clone(),
-                                        format!("{}", font),
-                                    );
-                                }
-                            });
-                        ui.end_row();
-
-                    });
-
-                if ui.button("Delete").clicked() {
-                    self.focused_placeholder_idx = None;
-                    self.placeholders.remove(idx);
+        egui::Panel::left("left_panel")
+            .min_size(ui.available_size().x * 0.25)
+            .show_animated_inside(ui, self.left_panel_expand, |ui| {
+                if ui.button("Collapse").clicked() {
+                    self.left_panel_expand = false;
+                }
+                ui.heading("Control Panel");
+                if ui.button("Select Template…").clicked()
+                    && let Some(path) = rfd::FileDialog::new().pick_file()
+                {
+                    self.image_path = Some(path.display().to_string());
+                }
+                if let Some(path) = &self.image_path {
+                    ui.label(format!("Selected image: {path}"));
+                } else {
+                    ui.label("Selected image: Not Selected");
                 }
                 ui.separator();
-            }
 
-            if ui.button("Install Local Font…").clicked()
-                && let Some(path) = rfd::FileDialog::new().pick_file()
-            {
-                // egui::Context all points to the same context even when cloned (from docs)
-                install_new_font(self, &mut ui.ctx().clone(), path);
-            }
-
-            ui.separator();
-
-            if ui.button("Generate").clicked()
-                && let Some(path) = &self.image_path
-            {
-                self.generate_progress = Some(Arc::new(Mutex::new(0.)));
-                // Clones of CertGen fields to be moved inside the closure
-                let generate_progress = self.generate_progress.as_ref().unwrap().clone();
-                let data = self.source.data.clone();
-                let placeholders = self.placeholders.clone();
-                let path = path.clone();
-                let font_vec_handles = self.font_vec_handles.clone();
-                let access_hash = self.source.access_hash.clone();
-                let img_src = image::ImageReader::open(path).unwrap().decode().unwrap();
-                let ctx = ui.ctx().clone();
-                let generate_dir = self.generate_dir.clone();
-                let generate_template = self.generate_template.clone();
-
-                thread::spawn(move || {
-                    generate::generate_certificates(
-                        generate_progress,
-                        data,
-                        placeholders,
-                        font_vec_handles,
-                        access_hash,
-                        img_src,
-                        ctx,
-                        generate_dir,
-                        generate_template
-                    );
+                ui.collapsing("Placeholders", |ui| {
+                    for (idx, p) in self.placeholders.iter_mut().enumerate() {
+                        let response = ui.text_edit_singleline(&mut p.id);
+                        if response.gained_focus() {
+                            self.focused_placeholder_idx = Some(idx);
+                        }
+                    }
                 });
-            }
-            if let Some(prog) = &self.generate_progress {
-                let mut prog_copy = 0.;
-                if let Ok(prog) = prog.try_lock() {
-                    prog_copy = *prog;
-                    ui.add(egui::widgets::ProgressBar::new(prog_copy).show_percentage());
+
+                if ui.button("+ Add a new placeholder").clicked() {
+                    self.placeholders
+                        .push(Placeholder::new("New Placeholder", 16.));
                 }
-                if prog_copy == 1. {
-                    self.generate_progress = None;
+                ui.separator();
+
+                if let Some(idx) = self.focused_placeholder_idx {
+                    let p = &mut self.placeholders[idx];
+                    egui::Grid::new("my_grid")
+                        .num_columns(2)
+                        .spacing([40.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label("Font Size");
+                            ui.horizontal(|ui| {
+                                ui.add(egui::Slider::new(&mut p.font_size, 1.0..=500.0));
+                                ui.horizontal(|ui| {
+                                    if ui.button("+").clicked() {
+                                        p.font_size += 1.;
+                                    }
+                                    if ui.button("-").clicked() {
+                                        p.font_size -= 1.;
+                                    }
+                                });
+                            });
+
+                            ui.end_row();
+
+                            ui.label("Color");
+                            ui.color_edit_button_srgba(&mut p.color);
+
+                            ui.end_row();
+
+                            ui.label("Alignment");
+                            egui::ComboBox::from_id_salt("Text alignment")
+                                .selected_text(text::text_align_to_str(p.text_align))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut p.text_align,
+                                        egui::Align2::LEFT_CENTER,
+                                        "󰉢 Align Left",
+                                    );
+                                    ui.selectable_value(
+                                        &mut p.text_align,
+                                        egui::Align2::CENTER_CENTER,
+                                        " Justify (Center)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut p.text_align,
+                                        egui::Align2::RIGHT_CENTER,
+                                        "󰉣 Align Right",
+                                    );
+                                });
+
+                            ui.end_row();
+                            ui.label("Position");
+                            ui.horizontal(|ui| {
+                                if ui.button("󰘞").clicked() {
+                                    p.screen_align = Some(TextImageAlign::Horizontal);
+                                }
+                                if ui.button("󰘢").clicked() {
+                                    p.screen_align = Some(TextImageAlign::Vertical);
+                                }
+                            });
+                            ui.end_row();
+                            ui.label("Font");
+                            egui::ComboBox::from_label("Font")
+                                .selected_text(format!("{}", p.font_family))
+                                .show_ui(ui, |ui| {
+                                    for font in self.available_fonts.clone() {
+                                        ui.selectable_value(
+                                            &mut p.font_family,
+                                            font.clone(),
+                                            format!("{}", font),
+                                        );
+                                    }
+                                });
+                            ui.end_row();
+                        });
+
+                    if ui.button("Delete").clicked() {
+                        self.focused_placeholder_idx = None;
+                        self.placeholders.remove(idx);
+                    }
+                    ui.separator();
                 }
-                dbg!(prog_copy);
-            }
-        });
+
+                if ui.button("Install Local Font…").clicked()
+                    && let Some(path) = rfd::FileDialog::new().pick_file()
+                {
+                    // egui::Context all points to the same context even when cloned (from docs)
+                    install_new_font(self, &mut ui.ctx().clone(), path);
+                }
+
+                ui.separator();
+
+                if ui.button("Generate").clicked()
+                    && let Some(path) = &self.image_path
+                {
+                    self.generate_progress = Some(Arc::new(Mutex::new(0.)));
+                    // Clones of CertGen fields to be moved inside the closure
+                    let generate_progress = self.generate_progress.as_ref().unwrap().clone();
+                    let data = self.source.data.clone();
+                    let placeholders = self.placeholders.clone();
+                    let path = path.clone();
+                    let font_vec_handles = self.font_vec_handles.clone();
+                    let access_hash = self.source.access_hash.clone();
+                    let img_src = image::ImageReader::open(path).unwrap().decode().unwrap();
+                    let ctx = ui.ctx().clone();
+                    let generate_dir = self.generate_dir.clone();
+                    let generate_template = self.generate_template.clone();
+
+                    thread::spawn(move || {
+                        generate::generate_certificates(
+                            generate_progress,
+                            data,
+                            placeholders,
+                            font_vec_handles,
+                            access_hash,
+                            img_src,
+                            ctx,
+                            generate_dir,
+                            generate_template,
+                        );
+                    });
+                }
+                if let Some(prog) = &self.generate_progress {
+                    let mut prog_copy = 0.;
+                    if let Ok(prog) = prog.try_lock() {
+                        prog_copy = *prog;
+                        ui.add(egui::widgets::ProgressBar::new(prog_copy).show_percentage());
+                    }
+                    if prog_copy == 1. {
+                        self.generate_progress = None;
+                    }
+                    dbg!(prog_copy);
+                }
+            });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
             // TODO: make it so that there's a dialog that asks whether or not we want to load the

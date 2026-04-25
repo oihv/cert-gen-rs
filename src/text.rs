@@ -1,5 +1,10 @@
 use egui::Align2;
-pub fn calculate_text_position_by_alignment(p: &crate::Placeholder, scale: &ab_glyph::PxScale, font: &ab_glyph::FontVec, text: &str) -> f32 {
+pub fn calculate_text_position_by_alignment(
+    p: &crate::Placeholder,
+    scale: &ab_glyph::PxScale,
+    font: &ab_glyph::FontVec,
+    text: &str,
+) -> f32 {
     let size = imageproc::drawing::text_size(*scale, font, text);
     let mut pos_x = 0.;
     match p.text_align {
@@ -27,3 +32,11 @@ pub fn calculate_text_position_by_alignment(p: &crate::Placeholder, scale: &ab_g
     pos_x
 }
 
+pub fn text_align_to_str(align: Align2) -> String {
+    match align {
+        egui::Align2::LEFT_CENTER => "󰉢 Align Left".to_string(),
+        egui::Align2::CENTER_CENTER => " Justify (Center)".to_string(),
+        egui::Align2::RIGHT_CENTER => "󰉣 Align Right".to_string(),
+        _ => "".to_string(),
+    }
+}

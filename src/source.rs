@@ -3,6 +3,7 @@ use std::time::SystemTime;
 pub struct Source {
     pub path: Option<String>,
     pub last_modified: SystemTime,
+    pub header: Vec<String>,
     pub data: Vec<Vec<String>>,
     pub access_hash: HashMap<String, usize>,
 }
@@ -12,6 +13,7 @@ impl Default for Source {
         Self {
             path: None,
             last_modified: std::time::UNIX_EPOCH,
+            header: Vec::new(),
             data: Vec::new(),
             access_hash: HashMap::new(),
         }
@@ -32,6 +34,7 @@ impl Source {
                 // Get the first line
                 let line = lines.next().unwrap();
                 for (idx, key) in line.split(',').enumerate() {
+                    self.header.push(key.to_string());
                     self.access_hash.insert(key.to_string(), idx);
                 }
 

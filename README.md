@@ -1,10 +1,28 @@
 # Cert Gen
 A certificate generator utility program.
 
-## How To Use (WIP)
+## How To Use
+1. Image
+Choose an image as a template.
+
+2. Placeholder
 Add a placeholder for the text that wants to be automated.
 
-Include a data source for the placeholder to find the value for each individual. The column must match to the name of the placeholder.
+Variable are specified with curly braces ({}). For example "Date: {date}", means "Date: " is a string constant/literal, and `date` is a variable that will be searched from the source data.
+
+3. Data Source
+Choose a data source for the placeholder to find the value for each individual. The variable should match a column in the source, or else generation can't be done.
+
+4. Generate!
+Press the generate button in the Control Panel. And your certificates is ready to be distributed.
+
+# Features
+- Additional Fonts
+With `Install Local Fonts` button, you can add `.otf` `.ttf` fonts into the application.
+
+After that, choose the newly added font for which placeholder you want.
+
+- 
 
 ## TODO
 - [x] Fixed image to be able to refresh when detecting new version
@@ -25,14 +43,18 @@ Include a data source for the placeholder to find the value for each individual.
 - [x] Color picker
 - [x] Since egui uses their own font for it's installation, let's just load a new default font for both egui and for placeholder (install a nerd font too so emojis are supported)
 - [x] Handle alignment when drawing
-- [ ] Warning when there's column in source data that doesn't have the corresponding placeholder, prevent generation when there's still issue
+- [x] Add a table that shows the values in the loaded source
+- [ ] Change placeholder to force the use of {} to specify syntax instead.
+- [ ] think about how to propagate the error, handle it, instead of just panicking. -> Custom error types, handle it in the main buffer by showing it in the main UI, return early if there's an error, inspired by Green Tea Coding video!)
+- [ ] Warning when there's column in source data that doesn't have the corresponding placeholder, prevent generation when there's still issue (Can add it to the table)
 - [ ] Add a notification popup that shows that some action is completed (loading a file, loading source, generating)
 - [x] Shows loading bar when generating instead of just freezing
 - [ ] CLI version??? (what for? ofc for fast automation, pass in the template file, comma separated value, and boom)
 - [ ] Preview mode (display the values of the source in the image)
 - [ ] Add automatic values too (e.g. date, but this can also be automated inside excel anyway)
-- [ ] think about how to propagate the error, handle it, instead of just panicking. -> Custom error types, handle it in the main buffer by showing it in the main UI, return early if there's an error, inspired by Green Tea Coding video!)
 - [ ] Other styling functions (bold, italic) -> For now can be deferred to the user to select the style based on the font variation they install. -> But this function is really needed, think of a certificate where you need a whole paragraph to be typed (e.g. Mr. Tang as a **Coordinator of Media Division**), we would want this capability in the future.
 - [ ] Caching (installed fonts? project file to store the template image and the placeholders? Prompt if user exits without saving the project?)
 - [ ] Web version release
 - [ ] Load fonts installed in system -> I read that there's no crate that can help with that, yet. (https://github.com/emilk/egui/issues/749)
+- [ ] String escaping, what if the user wants to add curly braces as a literal? (But who will do that anyway for a certificate)
+- [ ] When changing text align, position changes unexpectedly
