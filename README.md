@@ -16,13 +16,17 @@ Choose a data source for the placeholder to find the value for each individual. 
 4. Generate!
 Press the generate button in the Control Panel. And your certificates is ready to be distributed.
 
-# Features
+## Features
 - Additional Fonts
 With `Install Local Fonts` button, you can add `.otf` `.ttf` fonts into the application.
 
 After that, choose the newly added font for which placeholder you want.
 
-- 
+- Workspace saving (WIP)
+Save your workspace (including placeholders, data source, template image), for future usage. Workspace is saved in a toml format.
+
+- CLI mode (WIP)
+With the workspace file, you can generate images quickly without accessing the GUI.
 
 ## TODO
 - [x] Fixed image to be able to refresh when detecting new version
@@ -44,7 +48,7 @@ After that, choose the newly added font for which placeholder you want.
 - [x] Since egui uses their own font for it's installation, let's just load a new default font for both egui and for placeholder (install a nerd font too so emojis are supported)
 - [x] Handle alignment when drawing
 - [x] Add a table that shows the values in the loaded source
-- [ ] Change placeholder to force the use of {} to specify syntax instead.
+- [x] Change placeholder to force the use of {} to specify syntax instead.
 - [ ] think about how to propagate the error, handle it, instead of just panicking. -> Custom error types, handle it in the main buffer by showing it in the main UI, return early if there's an error, inspired by Green Tea Coding video!)
 - [ ] Warning when there's column in source data that doesn't have the corresponding placeholder, prevent generation when there's still issue (Can add it to the table)
 - [ ] Add a notification popup that shows that some action is completed (loading a file, loading source, generating)

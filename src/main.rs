@@ -2,7 +2,7 @@ use eframe::egui;
 use egui::{FontFamily, Sense, Widget};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::{default, thread};
+use std::thread;
 use std::{fs, time::SystemTime};
 
 mod font;

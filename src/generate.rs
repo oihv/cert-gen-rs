@@ -3,22 +3,13 @@ use crate::{Placeholder, text};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CertGenGenerate {
     pub progress: Option<Arc<Mutex<f32>>>,
     pub template: String,
     pub dir: Option<String>,
 }
 
-impl Default for CertGenGenerate {
-    fn default() -> Self {
-        Self {
-            progress: None,
-            template: String::new(),
-            dir: None,
-        }
-    }
-}
 
 pub fn generate_certificates(
     generate_progress: Arc<Mutex<f32>>,
@@ -42,9 +33,7 @@ pub fn generate_certificates(
                     .to_vec(),
             )
             .unwrap();
-            let text = &row[*source.access_hash
-                .get(&p.id.clone())
-                .unwrap_or_else(|| panic!("Error: {} is not found in the source hash.", p.id))];
+            let text = crate::parser::construct_string(&p.id, &source.access_hash, row);
             // TODO: these values don't need to be computed multiple times
             // intended_text_height and scale should be computed once for all placeholders for each data
             // pos_x should be computed once for all placeholders and for all data
@@ -52,7 +41,7 @@ pub fn generate_certificates(
             let scale = ab_glyph::PxScale::from(
                 intended_text_height / imageproc::drawing::text_size(1., &font, &p.id).1 as f32,
             );
-            let pos_x = text::calculate_text_position_by_alignment(p, &scale, &font, text);
+            let pos_x = text::calculate_text_position_by_alignment(p, &scale, &font, &text);
 
             let color = image::Rgba::from([p.color.r(), p.color.g(), p.color.b(), p.color.a()]);
             imageproc::drawing::draw_text_mut(
@@ -62,7 +51,7 @@ pub fn generate_certificates(
                 p.rect.min.y as i32,
                 scale,
                 &font,
-                text,
+                &text,
             );
             curr_work += 1;
             *generate_progress.lock().unwrap() = curr_work as f32 / total_work as f32;
