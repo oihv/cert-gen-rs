@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Default)]
 pub struct CertGenGenerate {
-    pub progress: Option<Arc<Mutex<f32>>>,
     pub template: String,
     pub dir: Option<String>,
 }
