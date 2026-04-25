@@ -2,7 +2,7 @@ use eframe::egui;
 use egui::{FontFamily, Sense, Widget};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{default, thread};
 use std::{fs, time::SystemTime};
 
 mod font;
@@ -13,12 +13,25 @@ mod source;
 mod text;
 use crate::source::Source;
 
+struct CertGenImg {
+    path: Option<String>,
+    last_modified: SystemTime,
+    size: egui::Vec2,
+}
+
+impl Default for CertGenImg {
+    fn default() -> Self {
+        Self {
+            path: None,
+            last_modified: SystemTime::UNIX_EPOCH,
+            size: egui::Vec2::ZERO,
+        }
+    }
+}
+
 struct CertGen {
     left_panel_expand: bool,
-    // TODO: change image to a whole new struct instead
-    image_path: Option<String>,
-    image_last_modified: SystemTime,
-    image_size: egui::Vec2,
+    image: CertGenImg,
     source: Source,
     placeholders: Vec<Placeholder>,
     focused_placeholder_idx: Option<usize>,
@@ -26,27 +39,23 @@ struct CertGen {
     available_fonts: Vec<egui::FontFamily>,
     font_vec_handles: HashMap<String, Vec<u8>>,
     // TODO: move to another struct too, just like source
+    generate: generate::CertGenGenerate,
     generate_progress: Option<Arc<Mutex<f32>>>,
-    generate_template: String,
-    generate_dir: Option<String>,
 }
 
 impl Default for CertGen {
     fn default() -> Self {
         Self {
             left_panel_expand: true,
-            image_path: None,
-            image_last_modified: SystemTime::UNIX_EPOCH,
-            image_size: egui::Vec2::ZERO,
+            image: CertGenImg::default(),
             source: Source::default(),
             placeholders: Vec::new(),
             focused_placeholder_idx: None,
             scene_rect: egui::Rect::ZERO,
             available_fonts: vec![FontFamily::Proportional],
             font_vec_handles: HashMap::new(),
+            generate: generate::CertGenGenerate::default(),
             generate_progress: None,
-            generate_template: String::new(),
-            generate_dir: None,
         }
     }
 }
@@ -163,15 +172,15 @@ impl eframe::App for CertGen {
                 ui.separator();
 
                 ui.label("File name template");
-                ui.text_edit_singleline(&mut self.generate_template);
+                ui.text_edit_singleline(&mut self.generate.template);
 
                 ui.separator();
                 if ui.button("Select output directory…").clicked()
                     && let Some(path) = rfd::FileDialog::new().pick_folder()
                 {
-                    self.generate_dir = Some(path.display().to_string());
+                    self.generate.dir = Some(path.display().to_string());
                 }
-                if let Some(path) = &self.generate_dir {
+                if let Some(path) = &self.generate.dir {
                     ui.label(format!("Selected directory: {path}"));
                 } else {
                     ui.label(
@@ -190,9 +199,9 @@ impl eframe::App for CertGen {
                 if ui.button("Select Template…").clicked()
                     && let Some(path) = rfd::FileDialog::new().pick_file()
                 {
-                    self.image_path = Some(path.display().to_string());
+                    self.image.path = Some(path.display().to_string());
                 }
-                if let Some(path) = &self.image_path {
+                if let Some(path) = &self.image.path {
                     ui.label(format!("Selected image: {path}"));
                 } else {
                     ui.label("Selected image: Not Selected");
@@ -305,32 +314,28 @@ impl eframe::App for CertGen {
                 ui.separator();
 
                 if ui.button("Generate").clicked()
-                    && let Some(path) = &self.image_path
+                    && let Some(path) = &self.image.path
                 {
                     self.generate_progress = Some(Arc::new(Mutex::new(0.)));
                     // Clones of CertGen fields to be moved inside the closure
                     let generate_progress = self.generate_progress.as_ref().unwrap().clone();
-                    let data = self.source.data.clone();
+                    let generate = self.generate.clone();
                     let placeholders = self.placeholders.clone();
                     let path = path.clone();
                     let font_vec_handles = self.font_vec_handles.clone();
-                    let access_hash = self.source.access_hash.clone();
+                    let source = self.source.clone();
                     let img_src = image::ImageReader::open(path).unwrap().decode().unwrap();
                     let ctx = ui.ctx().clone();
-                    let generate_dir = self.generate_dir.clone();
-                    let generate_template = self.generate_template.clone();
 
                     thread::spawn(move || {
                         generate::generate_certificates(
                             generate_progress,
-                            data,
+                            source,
                             placeholders,
                             font_vec_handles,
-                            access_hash,
                             img_src,
                             ctx,
-                            generate_dir,
-                            generate_template,
+                            generate,
                         );
                     });
                 }
@@ -350,14 +355,14 @@ impl eframe::App for CertGen {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             // TODO: make it so that there's a dialog that asks whether or not we want to load the
             // new file instead
-            if let Some(path) = &self.image_path {
+            if let Some(path) = &self.image.path {
                 let metadata = fs::metadata(path).unwrap();
                 if let Ok(time) = metadata.modified() {
-                    if self.image_last_modified == SystemTime::UNIX_EPOCH {
-                        self.image_last_modified = time;
-                    } else if self.image_last_modified != time {
+                    if self.image.last_modified == SystemTime::UNIX_EPOCH {
+                        self.image.last_modified = time;
+                    } else if self.image.last_modified != time {
                         ctx.forget_image(&format!("file://{path}"));
-                        self.image_last_modified = time;
+                        self.image.last_modified = time;
                         println!("image forgotten!: ${time:?}");
                     }
                 }
@@ -375,10 +380,10 @@ impl eframe::App for CertGen {
                         .ui(ui);
                     ui.label(format!("img_rect: {}", img_res.rect));
 
-                    if self.image_size.x != img_res.rect.max.x - img_res.rect.min.x
-                        || self.image_size.y != img_res.rect.max.y - img_res.rect.min.y
+                    if self.image.size.x != img_res.rect.max.x - img_res.rect.min.x
+                        || self.image.size.y != img_res.rect.max.y - img_res.rect.min.y
                     {
-                        self.image_size = egui::Vec2::new(
+                        self.image.size = egui::Vec2::new(
                             img_res.rect.max.x - img_res.rect.min.x,
                             img_res.rect.max.y - img_res.rect.min.y,
                         );
@@ -391,7 +396,6 @@ impl eframe::App for CertGen {
                             match align {
                                 TextImageAlign::Horizontal => {
                                     let img_width = img_res.rect.max.x - img_res.rect.min.x;
-                                    // let img_width = self.image_size.x;
                                     let p_width = p.rect.max.x - p.rect.min.x;
                                     match p.text_align {
                                         egui::Align2::LEFT_CENTER => {
@@ -405,7 +409,6 @@ impl eframe::App for CertGen {
                                     }
                                 }
                                 TextImageAlign::Vertical => {
-                                    // let img_height = self.image_size.y;
                                     let img_height = img_res.rect.max.y - img_res.rect.min.y;
                                     let p_height = p.rect.max.y - p.rect.min.y;
                                     p.pos.y = img_height / 2. - p_height / 2.;

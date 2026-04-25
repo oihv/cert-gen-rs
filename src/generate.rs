@@ -2,21 +2,37 @@ use crate::parser;
 use crate::{Placeholder, text};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+pub struct CertGenGenerate {
+    pub progress: Option<Arc<Mutex<f32>>>,
+    pub template: String,
+    pub dir: Option<String>,
+}
+
+impl Default for CertGenGenerate {
+    fn default() -> Self {
+        Self {
+            progress: None,
+            template: String::new(),
+            dir: None,
+        }
+    }
+}
+
 pub fn generate_certificates(
     generate_progress: Arc<Mutex<f32>>,
-    data: Vec<Vec<String>>,
+    source: crate::source::Source,
     placeholders: Vec<Placeholder>,
     font_vec_handles: HashMap<String, Vec<u8>>,
-    access_hash: HashMap<String, usize>,
     img_src: image::DynamicImage,
     ctx: egui::Context,
-    generate_dir: Option<String>,
-    generate_template: String,
+    generate: crate::generate::CertGenGenerate
 ) {
-    let total_work = data.len() * placeholders.len();
+    let total_work = source.data.len() * placeholders.len();
     let mut curr_work = 0;
 
-    for (idx, row) in data.iter().enumerate() {
+    for (idx, row) in source.data.iter().enumerate() {
         let mut img = img_src.clone();
         for p in &placeholders {
             let font = ab_glyph::FontVec::try_from_vec(
@@ -26,7 +42,7 @@ pub fn generate_certificates(
                     .to_vec(),
             )
             .unwrap();
-            let text = &row[*access_hash
+            let text = &row[*source.access_hash
                 .get(&p.id.clone())
                 .unwrap_or_else(|| panic!("Error: {} is not found in the source hash.", p.id))];
             // TODO: these values don't need to be computed multiple times
@@ -53,13 +69,13 @@ pub fn generate_certificates(
             ctx.request_repaint();
         }
         let mut dir = String::new();
-        if let Some(ref dir_handle) = generate_dir {
+        if let Some(ref dir_handle) = generate.dir {
             dir = dir_handle.to_string()
         }
-        let _ = if generate_template.is_empty() {
+        let _ = if generate.template.is_empty() {
             img.save(format!("{dir}Welcome_Certificate_new_{idx}.jpg"))
         } else {
-            let file_name = parser::construct_string(&generate_template, &access_hash, row);
+            let file_name = parser::construct_string(&generate.template, &source.access_hash, row);
             img.save(format!("{dir}/{file_name}.jpg"))
         };
     }

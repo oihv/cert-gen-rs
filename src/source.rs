@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
+
+#[derive(Clone)]
 pub struct Source {
     pub path: Option<String>,
     pub last_modified: SystemTime,
