@@ -59,7 +59,7 @@ impl crate::CertGen {
                             TextImageAlign::Vertical => {
                                 let img_height = img_res.rect.max.y - img_res.rect.min.y;
                                 let p_height = p.rect.max.y - p.rect.min.y;
-                                p.pos.y = img_height / 2. - p_height / 2.;
+                                p.pos.y = img_height / 2.;
                             }
                         }
                         p.screen_align = None;
