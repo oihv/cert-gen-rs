@@ -61,10 +61,10 @@ pub fn generate_certificates(
             dir = dir_handle.to_string()
         }
         let _ = if generate.template.is_empty() {
-            img.save(format!("{dir}Welcome_Certificate_new_{idx}.jpg"))
+            img.save(format!("{dir}generated_{idx}.jpg"))
         } else {
-            let file_name = parser::construct_string(&generate.template, &source.access_hash, row);
-            img.save(format!("{dir}/{file_name}.jpg"))
+            let file_name = parser::construct_string(&generate.template, &source.access_hash, row)?;
+            img.save(format!("{dir}{file_name}.jpg"))
         };
     }
 }
