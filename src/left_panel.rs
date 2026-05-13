@@ -152,7 +152,6 @@ impl crate::CertGen {
             if prog_copy == 1. {
                 self.generate_progress = None;
             }
-            dbg!(prog_copy);
         }
     }
 }
